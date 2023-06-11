@@ -1,3 +1,11 @@
+use crate::*;
+
+pub type StackType = usize;
+pub type BaseType = i64;
+pub type UBaseType = u64;
+pub type TickType = u32;
+pub type CVoidPointer = *mut std::os::raw::c_void;
+
 use std::boxed::FnBox;
 use std::mem;
 use std::sync::{Arc, RwLock, Weak};
@@ -7,30 +15,30 @@ pub struct TCB {
     //* basic information
     StateListItem: ItemLink,
     EventListItem: ItemLink,
-    pcTaskName: String,
+    TaskName: String,
     StackDepth: UBaseType,
     Priority: UBaseType,
     StackPointer: StackType,
 
     #[cfg(feature = "portCRITICAL_NESTING_IN_TCB")]
-    critical_nesting: UBaseType,
+    CriticalNesting: UBaseType,
     #[cfg(feature = "configUSE_MUTEXES")]
-    base_priority: UBaseType,
+    BasePriority: UBaseType,
     #[cfg(feature = "configUSE_MUTEXES")]
-    mutexes_held: UBaseType,
+    MutexedHeld: UBaseType,
     #[cfg(feature = "configGENERATE_RUN_TIME_STATS")]
-    runtime_counter: TickType,
+    RuntimeCounter: TickType,
     #[cfg(feature = "configUSE_TASK_NOTIFICATIONS")]
-    notified_value: u32,
+    NotifiedValue: u32,
     #[cfg(feature = "configUSE_TASK_NOTIFICATIONS")]
-    notify_state: u8,
+    NotifyState: u8,
     #[cfg(feature = "INCLUDE_xTaskAbortDelay")]
-    delay_aborted: bool,
+    DelayAborted: bool,
 }
 
 impl PartialEq for TCB {
     fn eq(&self, other: &Self) -> bool {
-        self.stack_pos == other.stack_pos
+        self.StackPointer == other.StackPointer
     }
 }
 
@@ -50,36 +58,44 @@ impl TCB {
         TCB {
             StateListItem: Default::default(),
             EventListItem: Default::default(),
-            task_priority: 1,       //initialized with 1
+            Priority: 1,       //initialized with 1
             StackDepth: configMINIMAL_STACK_SIZE!(),
-            pcTaskName: String::from("Unnamed"),
+            TaskName: String::from("Unnamed"),
             StackPointer: 0,
 
             #[cfg(feature = "portCRITICAL_NESTING_IN_TCB")]
-            critical_nesting: 0,
+            CriticalNesting: 0,
             #[cfg(feature = "configUSE_MUTEXES")]
-            base_priority: 0,
+            BasePriority: 0,
             #[cfg(feature = "configUSE_MUTEXES")]
-            mutexes_held: 0,
+            MutexedHeld: 0,
             #[cfg(feature = "configGENERATE_RUN_TIME_STATS")]
-            runtime_counter: 0,
+            RuntimeCounter: 0,
             #[cfg(feature = "configUSE_TASK_NOTIFICATIONS")]
-            notified_value: 0,
+            NotifiedValue: 0,
             #[cfg(feature = "configUSE_TASK_NOTIFICATIONS")]
-            notify_state: 0,
+            NotifyState: 0,
             #[cfg(feature = "INCLUDE_xTaskAbortDelay")]
-            delay_aborted: false,
+            DelayAborted: false,
         }
+    }
+    
+    pub fn GetName(&self) -> String {
+        self.TaskName.clone()
     }
 
     pub fn SetName(&mut self, name: &str) -> Self {
-        self.pcTaskName = name.to_owned().to_string();
+        self.TaskName = name.to_owned().to_string();
         Self
     }
 
     pub fn SetStackDepth(&mut self, stacksize: UBaseType) -> Self {
-        self.ulStackDepth = stacksize;
+        self.StackDepth = stacksize;
         Self
+    }
+
+    pub fn GetPriority(&self) -> UBaseType {
+        self.Priority.clone()
     }
 
     pub fn SetPriority(mut self, priority: UBaseType) -> Self {
@@ -90,72 +106,60 @@ impl TCB {
                 configMAX_PRIORITIES!() - 1,
                 priority
             );
-            self.task_priority = configMAX_PRIORITIES!() - 1;
+            self.Priority = configMAX_PRIORITIES!() - 1;
         } else {
-            self.task_priority = priority;
+            self.Priority = priority;
         }
         self
     }
-    
-    pub fn get_name(&self) -> String {
-        self.task_name.clone()
+
+    pub fn GetBasePriority(&self) -> UBaseType {
+        self.BasePriority
     }
 
-    pub fn get_priority(&self) -> UBaseType {
-        self.task_priority.clone()
+    pub fn SetBasePriority(&mut self, new_val: UBaseType) {
+        self.BasePriority = new_val
     }
 
-    pub fn set_priority(&mut self, new_priority: UBaseType) {
-        self.task_priority = new_priority;
+    pub fn GetStateListItem(&self) -> ItemLink {
+        Arc::clone(&self.StateListItem)
     }
 
-    pub fn get_state_list_item(&self) -> ItemLink {
-        Arc::clone(&self.state_list_item)
-    }
-
-    pub fn get_event_list_item(&self) -> ItemLink {
-        Arc::clone(&self.event_list_item)
+    pub fn GetEventListItem(&self) -> ItemLink {
+        Arc::clone(&self.EventListItem)
     }
 
     #[cfg(feature = "configGENERATE_RUN_TIME_STATS")]
-    pub fn get_run_time(&self) -> TickType {
-        self.runtime_counter
+    pub fn GetRunTime(&self) -> TickType {
+        self.RuntimeCounter
     }
 
     #[cfg(feature = "configGENERATE_RUN_TIME_STATS")]
-    pub fn set_run_time(&mut self, next_val: TickType) -> TickType {
-        let prev_val: u32 = self.runtime_counter;
-        self.runtime_counter = next_val;
+    pub fn SetRunTime(&mut self, next_val: TickType) -> TickType {
+        let prev_val: u32 = self.RuntimeCounter;
+        self.RuntimeCounter = next_val;
         prev_val
     }
 
     #[cfg(feature = "INCLUDE_xTaskAbortDelay")]
-    pub fn get_delay_aborted(&self) -> bool {
-        self.delay_aborted
+    pub fn GetDelayAborted(&self) -> bool {
+        self.DelayAborted
     }
 
     #[cfg(feature = "INCLUDE_xTaskAbortDelay")]
-    pub fn set_delay_aborted(&mut self, next_val: bool) -> bool {
-        let prev_val: bool = self.delay_aborted;
-        self.delay_aborted = next_val;
+    pub fn SetDelayAborted(&mut self, next_val: bool) -> bool {
+        let prev_val: bool = self.DelayAborted;
+        self.DelayAborted = next_val;
         prev_val
     }
     #[cfg(feature = "configUSE_MUTEXES")]
-    pub fn get_mutex_held_count(&self) -> UBaseType {
-        self.mutexes_held
+    pub fn GetMutexHeldCount(&self) -> UBaseType {
+        self.MutexedHeld
     }
 
     #[cfg(feature = "configUSE_MUTEXES")]
-    pub fn set_mutex_held_count(&mut self, new_count: UBaseType) {
-        self.mutexes_held = new_count;
-    }
-
-    pub fn get_base_priority(&self) -> UBaseType {
-        self.base_priority
-    }
-
-    pub fn set_base_priority(&mut self, new_val: UBaseType) {
-        self.base_priority = new_val
+    pub fn SetMutexHeldCount(&mut self, new_count: UBaseType) {
+        self.MutexedHeld = new_count;
     }
 }
 
@@ -184,61 +188,41 @@ impl From<TaskHandle> for Weak<RwLock<TCB>> {
     }
 }
 
-pub fn record_ready_priority(priority: UBaseType) {
+pub fn RecordReadyPriority(priority: UBaseType) {
     if priority > get_top_ready_priority!() {
         set_top_ready_priority!($priority);
     }
 }
 
 impl TaskHandle {
-    pub fn get_event_list_item(&self) -> ItemLink {
-        GetTCB_read(self).get_event_list_item()
-    }
-
-    pub fn get_state_list_item(&self) -> ItemLink {
-        GetTCB_read(self).get_state_list_item()
-    }
-
-    pub fn get_name(&self) -> String {
-        GetTCB_read(self).get_name()
+    #[cfg(feature = "configGENERATE_RUN_TIME_STATS")]
+    pub fn GetRunTime(&self) -> TickType {
+        GetTCB_read(self).GetRunTime()
     }
 
     #[cfg(feature = "configGENERATE_RUN_TIME_STATS")]
-    pub fn get_run_time(&self) -> TickType {
-        GetTCB_read(self).get_run_time()
-    }
-
-    #[cfg(feature = "configGENERATE_RUN_TIME_STATS")]
-    pub fn set_run_time(&self, next_val: TickType) -> TickType {
-        GetTCB_write(self).set_run_time(next_val)
+    pub fn SetRunTime(&self, next_val: TickType) -> TickType {
+        GetTCB_write(self).SetRunTime(next_val)
     }
 
     #[cfg(feature = "INCLUDE_xTaskAbortDelay")]
-    pub fn get_delay_aborted(&self) -> bool {
-        GetTCB_read(self).get_delay_aborted()
+    pub fn GetDelayAborted(&self) -> bool {
+        GetTCB_read(self).GetDelayAborted()
     }
 
     #[cfg(feature = "INCLUDE_xTaskAbortDelay")]
-    pub fn set_delay_aborted(&self, next_val: bool) -> bool {
-        GetTCB_write(self).set_delay_aborted(next_val)
+    pub fn SetDelayAborted(&self, next_val: bool) -> bool {
+        GetTCB_write(self).SetDelayAborted(next_val)
     }
 
     #[cfg(feature = "configUSE_MUTEXES")]
-    pub fn get_mutex_held_count(&self) -> UBaseType {
-        GetTCB_read(self).get_mutex_held_count()
+    pub fn GetMutexHeldCount(&self) -> UBaseType {
+        GetTCB_read(self).GetMutexHeldCount()
     }
 
     #[cfg(feature = "configUSE_MUTEXES")]
-    pub fn set_mutex_held_count(&self, new_count: UBaseType) {
-        GetTCB_write(self).set_mutex_held_count(new_count)
-    }
-
-    pub fn get_base_priority(&self) -> UBaseType {
-        GetTCB_read(self).get_base_priority()
-    }
-
-    pub fn set_base_priority(&self, new_val: UBaseType) {
-        GetTCB_write(self).set_base_priority(new_val)
+    pub fn SetMutexHeldCount(&self, new_count: UBaseType) {
+        GetTCB_write(self).SetMutexHeldCount(new_count)
     }
 
     pub fn from_arc(arc: Arc<RwLock<TCB>>) -> Self {
@@ -252,14 +236,36 @@ impl TaskHandle {
         Arc::into_raw(self.0) as *mut _
     }
 
-    pub fn get_priority(&self) -> UBaseType {
-        self.0.read().unwrap().get_priority()
+    pub fn GetEventListItem(&self) -> ItemLink {
+        GetTCB_read(self).GetEventListItem()
     }
 
-    pub fn set_priority(&self, new_priority: UBaseType) {
-        self.GetTCB_write().set_priority(new_priority);
+    pub fn GetStateListItem(&self) -> ItemLink {
+        GetTCB_read(self).GetStateListItem()
     }
 
+    pub fn GetName(&self) -> String {
+        GetTCB_read(self).GetName()
+    }
+
+    pub fn GetPriority(&self) -> UBaseType {
+        self.0.read().unwrap().GetPriority()
+    }
+
+    pub fn SetPriority(&self, new_priority: UBaseType) {
+        self.GetTCB_write().SetPriority(new_priority);
+    }
+
+    pub fn SetPriorityInDetail(&mut self, NewPriority: UBaseType);
+
+    pub fn GetBasePriority(&self) -> UBaseType {
+        GetTCB_read(self).GetBasePriority()
+    }
+
+    pub fn SetBasePriority(&self, new_val: UBaseType) {
+        GetTCB_write(self).SetBasePriority(new_val)
+    }
+    
     pub fn GetTCB_read(&self) -> Result<(), FreeRtosError>{
         match self.0.try_read() {
             Ok(handle) => handle,
@@ -280,13 +286,13 @@ impl TaskHandle {
         }
     }
 
-    pub fn add_task_to_ready_list(&self) -> Result<(), FreeRtosError> {
+    pub fn AddTaskToReadyList(&self) -> Result<(), FreeRtosError> {
         //从Handle获取TCB
         let tcb = self.GetTCB_read(self);
-        let priority = self.get_priority();
+        let priority = self.GetPriority();
         //和当前最高Priority的任务比较,如果该taskhandle更高，就更新
         traceMOVED_TASK_TO_READY_STATE!(&tcb);
-        record_ready_priority(priority);
+        RecordReadyPriority(priority);
         //插入链表end
         list::list_insert_end(
             &READY_TASK_LISTS[priority as usize],
@@ -296,7 +302,7 @@ impl TaskHandle {
         Ok(())
     }
 
-    fn add_new_task_to_ready_list(&self) -> Result<(), FreeRtosError> {
+    fn AddNewTaskToReadyList(&self) -> Result<(), FreeRtosError> {
         let newtcb = self.GetTCB_read();
     
         //C语言宏接口
@@ -319,7 +325,7 @@ impl TaskHandle {
                 let tskhandle = get_current_task_handle!();
                 if !get_scheduler_running!() {
                     //如果现在调度器没启动，并且newtcb优先就高于currenttsk，那就用这个newtcb作为启动task
-                    if tskhandle.get_priority() <= newtcb.task_priority {
+                    if tskhandle.GetPriority() <= newtcb.Priority {
                         set_current_task_handle!(self.clone());
                     } else {
                         mtCOVERAGE_TEST_MARKER!();
@@ -329,14 +335,14 @@ impl TaskHandle {
             //获取task总数
             set_task_number!(get_task_number!() + 1);
             traceTASK_CREATE!(self.clone());
-            self.add_task_to_ready_list()?;
+            self.AddTaskToReadyList()?;
         }
         //C语言宏接口
         taskEXIT_CRITICAL!();
         if get_scheduler_running!() {
             //如果调度器启动了，而currenttsk优先级低于newtcb，那就中断抢占
-            let current_task_priority = get_current_task_handle!().get_priority();
-            if current_task_priority < newtcb.task_priority {
+            let current_task_priority = get_current_task_handle!().GetPriority();
+            if current_task_priority < newtcb.Priority {
                 //C语言接口
                 taskYIELD_IF_USING_PREEMPTION!();
             } else {
@@ -353,22 +359,22 @@ impl TaskHandle {
 //INCLUDE_xTaskAbortDelay用于启用xTaskAbortDelay()函数。将其定义为1即可启用此功能。
 //xTaskAbortDelay()强制任务离开阻塞状态并进入就绪状态。
 //即使任务处于阻塞状态等待的事件未发生，且任何指定的超时时间未过期，也将离开阻塞
-pub fn add_current_task_to_delayed_list(ticks_to_wait: TickType, can_block_indefinitely: bool) {
+pub fn AddCurrentTaskToDelayedList(ticks_to_wait: TickType, can_block_indefinitely: bool) {
     let curtskhandle = get_current_task_handle!();
     trace!("Remove succeeded");
 
     {
         #![cfg(feature = "INCLUDE_xTaskAbortDelay")]
-        curtskhandle.set_delay_aborted(false);
+        curtskhandle.SetDelayAborted(false);
     }
     trace!("Abort succeeded");
 
     //为了将该任务加入Blocked List，首先要从Ready List中移除
-    if list::list_remove(curtskhandle.get_state_list_item()) == 0 {
+    if list::list_remove(curtskhandle.GetStateListItem()) == 0 {
         trace!("Returned 0");
         //成功移除
         //重新设置Ready List的最高优先级
-        portRESET_READY_PRIORITY!(curtskhandle.get_priority(), get_top_ready_priority!());
+        portRESET_READY_PRIORITY!(curtskhandle.GetPriority(), get_top_ready_priority!());
     } else {
         trace!("Returned not 0");
         mtCOVERAGE_TEST_MARKER!();
@@ -382,14 +388,14 @@ pub fn add_current_task_to_delayed_list(ticks_to_wait: TickType, can_block_indef
         if ticks_to_wait == portMAX_DELAY && can_block_indefinitely {
             //将任务添加到Suspended List而不是Delayed List
             //确保它永久阻塞而不会被时钟唤醒
-            let cur_state_list_item = curtskhandle.get_state_list_item();
+            let cur_state_list_item = curtskhandle.GetStateListItem();
             list::list_insert_end(&SUSPENDED_TASK_LIST, cur_state_list_item);
         } else {
             //否则，函数会计算任务应该在什么时候被唤醒（如果事件没有发生）
             //并根据唤醒时间将任务添加到不同的延迟任务列表中
             let time_to_wake = get_tick_count!() + ticks_to_wait;
 
-            let cur_state_list_item = curtskhandle.get_state_list_item();
+            let cur_state_list_item = curtskhandle.GetStateListItem();
             list::set_list_item_value(&cur_state_list_item, time_to_wake);
 
             if time_to_wake < get_tick_count!() {
@@ -397,7 +403,7 @@ pub fn add_current_task_to_delayed_list(ticks_to_wait: TickType, can_block_indef
                 list::list_insert(&OVERFLOW_DELAYED_TASK_LIST, cur_state_list_item);
             } else {
                 //否则，将任务添加到当前延迟任务列表中
-                list::list_insert(&DELAYED_TASK_LIST, curtskhandle.get_state_list_item());
+                list::list_insert(&DELAYED_TASK_LIST, curtskhandle.GetStateListItem());
 
                 //如果任务被添加到了延迟任务列表的头部
                 //那么xNextTaskUnblockTime需要被更新
@@ -417,7 +423,7 @@ pub fn add_current_task_to_delayed_list(ticks_to_wait: TickType, can_block_indef
         //并根据唤醒时间将任务添加到适当的延迟任务列表中
         let time_to_wake = get_tick_count!() + ticks_to_wait;
 
-        let cur_state_list_item = curtskhandle.get_state_list_item();
+        let cur_state_list_item = curtskhandle.GetStateListItem();
         list::set_list_item_value(&cur_state_list_item, time_to_wake);
 
         if time_to_wake < get_tick_count!() {
@@ -425,7 +431,7 @@ pub fn add_current_task_to_delayed_list(ticks_to_wait: TickType, can_block_indef
             list::list_insert(&OVERFLOW_DELAYED_TASK_LIST, cur_state_list_item);
         } else {
             //否则，将任务添加到当前延迟任务列表中
-            list::list_insert(&DELAYED_TASK_LIST, curtskhandle.get_state_list_item());
+            list::list_insert(&DELAYED_TASK_LIST, curtskhandle.GetStateListItem());
 
             //如果任务被添加到了延迟任务列表的头部
             //那么xNextTaskUnblockTime需要被更新
@@ -439,7 +445,7 @@ pub fn add_current_task_to_delayed_list(ticks_to_wait: TickType, can_block_indef
     trace!("Place succeeded");
 }
 
-pub fn reset_next_task_unblock_time() {
+pub fn ResetNextTaskUnblockTime() {
     if list_is_empty(&DELAYED_TASK_LIST) {
         //检查DELAYED_TASK_LIST是否为空
         //如果为空，则将 xNextTaskUnblockTime 设置为最大可能值
@@ -448,39 +454,29 @@ pub fn reset_next_task_unblock_time() {
         //如果DELAYED_TASK_LIST不为空
         //就把xNextTaskUnblockTime设置为该列表头结点的等待时间
         let mut temp = get_owner_of_head_entry(&DELAYED_TASK_LIST);
-        set_next_task_unblock_time!(get_list_item_value(&temp.get_state_list_item()));
+        set_next_task_unblock_time!(get_list_item_value(&temp.GetStateListItem()));
     }
-}
-
-#[macro_export]
-macro_rules! get_handle_from_option {
-    ($option: expr) => {
-        match $option {
-            Some(handle) => handle,
-            None => get_current_task_handle!(),
-        }
-    };
 }
 
 #[cfg(feature = "INCLUDE_vTaskDelete")]
 pub fn task_delete(task_to_delete: Option<TaskHandle>) {
     //如果NULL被传入，就删除calling task
-    let pxtcb = get_handle_from_option!(task_to_delete);
+    let pxtcb = GetHandleFromOption!(task_to_delete);
 
     taskENTER_CRITICAL!();
     {
         //将任务从Ready List移除,前提是它在这个List
-        if list::list_remove(pxtcb.get_state_list_item()) == 0 {
+        if list::list_remove(pxtcb.GetStateListItem()) == 0 {
             //重新设置优先级
-            taskRESET_READY_PRIORITY!(pxtcb.get_priority());
+            taskRESET_READY_PRIORITY!(pxtcb.GetPriority());
         } else {
             mtCOVERAGE_TEST_MARKER!();
         }
 
         //接下来检查任务是否在等待事件
         //如果是，则从事件列表中移除该任务；否则，执行测试标记。
-        if list::get_list_item_container(&pxtcb.get_event_list_item()).is_some() {
-            list::list_remove(pxtcb.get_event_list_item());
+        if list::get_list_item_container(&pxtcb.GetEventListItem()).is_some() {
+            list::list_remove(pxtcb.GetEventListItem());
         } else {
             mtCOVERAGE_TEST_MARKER!();
         }
@@ -492,7 +488,7 @@ pub fn task_delete(task_to_delete: Option<TaskHandle>) {
             //检查要删除的任务是否是当前正在运行的任务
             //如果是，则将该任务插入到等待终止的任务列表中
             //以便空闲任务能够检查该列表并释放调度器为TCB和堆栈分配的内存。
-            list::list_insert_end(&TASKS_WAITING_TERMINATION, pxtcb.get_state_list_item());
+            list::list_insert_end(&TASKS_WAITING_TERMINATION, pxtcb.GetStateListItem());
 
             //递增全局变量ucTasksDeleted
             //以便空闲任务知道有一个任务已被删除，因此应检查xTasksWaitingTermination列表
@@ -507,11 +503,11 @@ pub fn task_delete(task_to_delete: Option<TaskHandle>) {
             set_current_number_of_tasks!(get_current_number_of_tasks!() - 1);
 
             //释放堆栈所占用的内存
-            let stack_pos = pxtcb.GetTCB_read().stack_pos;
-            port::port_free(stack_pos as *mut _);
+            let StackPointer = pxtcb.GetTCB_read().StackPointer;
+            port::port_free(StackPointer as *mut _);
 
             //调用函数reset_next_task_unblock_time()重置下一个预期解除阻塞时间
-            reset_next_task_unblock_time();
+            ResetNextTaskUnblockTime();
         }
     }
     taskEXIT_CRITICAL!();
@@ -537,20 +533,20 @@ pub fn suspend_task(task_to_suspend: TaskHandle) {
         traceTASK_SUSPEND!(&tcb);
 
         //从原列表移除，并修改优先级
-        if list_remove(tcb.get_state_list_item()) == 0 {
-            taskRESET_READY_PRIORITY!(tcb.get_priority());
+        if list_remove(tcb.GetStateListItem()) == 0 {
+            taskRESET_READY_PRIORITY!(tcb.GetPriority());
         } else {
             mtCOVERAGE_TEST_MARKER!();
         }
 
         //从事件列表中移除
-        if get_list_item_container(&tcb.get_event_list_item()).is_some() {
-            list_remove(tcb.get_event_list_item());
+        if get_list_item_container(&tcb.GetEventListItem()).is_some() {
+            list_remove(tcb.GetEventListItem());
         } else {
             mtCOVERAGE_TEST_MARKER!();
         }
         //加入SUSPEND列表
-        list_insert_end(&SUSPENDED_TASK_LIST, tcb.get_state_list_item());
+        list_insert_end(&SUSPENDED_TASK_LIST, tcb.GetStateListItem());
     }
     taskEXIT_CRITICAL!();
 
@@ -558,7 +554,7 @@ pub fn suspend_task(task_to_suspend: TaskHandle) {
         //修改next_task_unblock_time
         taskENTER_CRITICAL!();
         {
-            reset_next_task_unblock_time();
+            ResetNextTaskUnblockTime();
         }
         taskEXIT_CRITICAL!();
     } else {
@@ -584,19 +580,19 @@ pub fn suspend_task(task_to_suspend: TaskHandle) {
 }
 
 #[cfg(feature = "INCLUDE_vTaskSuspend")]
-pub fn task_is_tasksuspended(task: &TaskHandle) -> bool {
+pub fn IsTaskSuspended(task: &TaskHandle) -> bool {
     //检查给定任务是否处于暂停状态。
     let mut xreturn: bool = false;
     let tcb = task.GetTCB_read();
 
     //检查给定任务是否包含在暂停任务列表中
-    if is_contained_within(&SUSPENDED_TASK_LIST, &tcb.get_state_list_item()) {
+    if is_contained_within(&SUSPENDED_TASK_LIST, &tcb.GetStateListItem()) {
         //如果是，则检查该任务是否正在从中断服务例程（ISR）中恢复
         //即检查在不在PENDING_READY_LIST里
-        if !is_contained_within(&PENDING_READY_LIST, &tcb.get_event_list_item()) {
+        if !is_contained_within(&PENDING_READY_LIST, &tcb.GetEventListItem()) {
             //如果没有，则检查该任务是否因为处于暂停状态或因为阻塞且没有超时而被包含在暂停列表中
             //即检查是不是事件驱动而待在暂停任务列表
-            if get_list_item_container(&tcb.get_event_list_item()).is_none() {
+            if get_list_item_container(&tcb.GetEventListItem()).is_none() {
                 xreturn = true;
             } else {
                 mtCOVERAGE_TEST_MARKER!();
@@ -612,7 +608,7 @@ pub fn task_is_tasksuspended(task: &TaskHandle) -> bool {
 }
 
 #[cfg(feature = "INCLUDE_vTaskSuspend")]
-pub fn resume_task(task_to_resume: TaskHandle) {
+pub fn ResumeTask(task_to_resume: TaskHandle) {
     //函数目的是恢复一个任务
     trace!("resume task called!");
     let mut tcb = task_to_resume.GetTCB_read();
@@ -621,17 +617,17 @@ pub fn resume_task(task_to_resume: TaskHandle) {
         //检查要恢复的任务是否为当前正在执行的任务，如果不是的情况：
         taskENTER_CRITICAL!();
         {
-            if task_is_tasksuspended(&task_to_resume) {
+            if IsTaskSuspended(&task_to_resume) {
                 //调用task_is_tasksuspended函数检查给定任务是否处于暂停状态
                 traceTASK_RESUME!(&tcb);
 
                 //如果是,从暂停列表中删除该任务并将其添加到准备列表中
-                list_remove(tcb.get_state_list_item());
-                task_to_resume.add_task_to_ready_list();
+                list_remove(tcb.GetStateListItem());
+                task_to_resume.AddTaskToReadyList();
 
-                let current_task_priority = get_current_task_handle!().get_priority();
+                let current_task_priority = get_current_task_handle!().GetPriority();
                 /* We may have just resumed a higher priority task. */
-                if tcb.get_priority() >= current_task_priority {
+                if tcb.GetPriority() >= current_task_priority {
                     //检查要恢复的任务的优先级是否大于或等于当前任务的优先级
                     //如果是，则使用宏taskYIELD_IF_USING_PREEMPTION!()触发上下文切换
                     taskYIELD_IF_USING_PREEMPTION!();
@@ -646,5 +642,126 @@ pub fn resume_task(task_to_resume: TaskHandle) {
     } else {
         //检查要恢复的任务是否为当前正在执行的任务，如果是，那根本不用resume
         mtCOVERAGE_TEST_MARKER!();
+    }
+}
+
+#[macro_export]
+macro_rules! GetHandleFromOption {
+    ($option: expr) => {
+        match $option {
+            Some(handle) => handle,
+            None => get_current_task_handle!(),
+        }
+    };
+}
+
+impl TaskHandle{
+    pub fn SetPriorityInDetail(&mut self, NewPriority: UBaseType) {
+        let mut NewPriority = NewPriority;
+        let mut YieldRequired: bool = false;
+        let mut CurrentBasePriority: UBaseType = 0;
+        let mut PriorityUsedOnEntry: UBaseType = 0;
+    
+        //首先检查NewPriority是否大于最大限定，并对其进行修改
+        if NewPriority >= configMAX_PRIORITIES!() as UBaseType {
+            NewPriority = configMAX_PRIORITIES!() as UBaseType - 1 as UBaseType;
+        } else {
+            mtCOVERAGE_TEST_MARKER!();
+        }
+    
+        taskENTER_CRITICAL!();
+        {
+            let mut pxTCB = GetHandleFromOption!(Task);
+            traceTASK_PRIORITY_SET!(&pxTCB, &NewPriority); 
+    
+    //基础优先级（base priority）是指任务在创建时分配的优先级
+    //当使用互斥锁时，任务的实际运行优先级可能会高于其基础优先级，
+    //以避免优先级反转问题
+    //当不再需要避免优先级反转问题时，任务的运行优先级将恢复为其基础优先级
+    
+    //优先级反转：通常发生在多个任务共享资源时
+    //例如，假设有三个任务：高优先级任务 H、中优先级任务 M 和低优先级任务 L
+    //假设 L 正在使用一个共享资源 R，而 H 需要使用该资源。此时，H 会被阻塞，直到 L 释放资源 R
+    //然而，在 L 释放资源 R 之前，如果 M 变为可运行状态，则 M 会抢占 L（因为 M 的优先级高于 L）
+    //导致 L 无法及时释放资源 R，从而导致 H 无法运行。
+            {
+                #![cfg(feature = "configUSE_MUTEXES")]
+                CurrentBasePriority = pxTCB.GetBasePriority();
+            }
+    
+            {
+                #![cfg(not(feature = "configUSE_MUTEXES"))]
+                CurrentBasePriority = pxTCB.GetPriority();
+            }
+    
+            if CurrentBasePriority != NewPriority {
+                //如果该任务不是正在执行的任务
+                //且优先级比现在正在执行的任务优先级高，Yield = 1
+                if pxTCB != get_current_task_handle!() {
+                    if NewPriority >= get_current_task_priority!() {
+                        YieldRequired = true;
+                    } else {
+                        mtCOVERAGE_TEST_MARKER!();
+                    }
+                }
+            } else if pxTCB == get_current_task_handle!() {
+                //如果该任务是正在执行的任务
+                //而且优先级改变了，Yield = 1
+                YieldRequired = true;
+            } 
+    
+            {
+                #![cfg(feature = "configUSE_MUTEXES")]
+                if pxTCB.GetBasePriority() == pxTCB.GetPriority() {
+                    pxTCB.SetPriority(NewPriority);
+                } else {
+                    mtCOVERAGE_TEST_MARKER!();
+                }
+                pxTCB.SetBasePriority(NewPriority);
+            }
+            #[cfg(not(feature = "configUSE_MUTEXS"))]
+            pxTCB.SetPriority(NewPriority);
+    
+            let EventListItem = pxTCB.GetEventListItem();
+            let StateListItem = pxTCB.GetStateListItem();
+    
+            if (list::get_list_item_value(&EventListItem) & taskEVENT_LIST_ITEM_VALUE_IN_USE) == 0 {
+                //检查事件列表项的值是否未被使用
+                //如果未被使用，则更新事件列表项的值，将其设置为 configMAX_PRIORITIES!() - NewPriority
+                list::set_list_item_value(
+                    &EventListItem,
+                    (configMAX_PRIORITIES!() as TickType - NewPriority as TickType),
+                );
+            } else {
+                mtCOVERAGE_TEST_MARKER!();
+            }
+    
+            if list::is_contained_within(
+                //检查该任务是否包含在就绪任务列表中
+                &READY_TASK_LISTS[PriorityUsedOnEntry as usize],
+                &StateListItem,
+            ) {
+                //如果包含，则从就绪任务列表中移除该状态列表项
+                if list::list_remove(StateListItem) == 0 as UBaseType {
+                    //如果移除后就绪任务列表为空，则使用 portRESET_READY_PRIORITY!() 宏重置就绪任务优先级
+                    portRESET_READY_PRIORITY!(PriorityUsedOnEntry, uxTopReadyPriority);
+                } else {
+                    mtCOVERAGE_TEST_MARKER!();
+                }
+                //将任务重新添加到就绪任务列表
+                pxTCB.AddTaskToReadyList();
+            } else {
+                mtCOVERAGE_TEST_MARKER!();
+            }
+    
+            if YieldRequired != false {
+                //Yield = 1时，如果支持抢占，那就抢占
+                taskYIELD_IF_USING_PREEMPTION!();
+            } else {
+                mtCOVERAGE_TEST_MARKER!();
+            }
+        }
+    
+        taskEXIT_CRITICAL!();
     }
 }
