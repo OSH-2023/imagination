@@ -41,7 +41,7 @@ ray start --head --port=6379 --include-dashboard=true --dashboard-host=0.0.0.0 -
 
 出现信息中含有：
 
-<img src = "C:\Users\DELL\Desktop\ray部署及测试\src\3.png">
+<img src = ".\src\3.png">
 
 这说明要创建从节点需要运行
 
@@ -53,7 +53,7 @@ ray start --address='172.31.175.228:6379'
 
 可以在web看到当前Ray Dashboard界面，其中VM6629-CS2023为刚创建的头节点，VM6549-qiu是刚建立的从节点
 
-<img src="C:\Users\DELL\Desktop\ray部署及测试\src\1.png" style="zoom:100%;" />
+<img src=".\src\1.png" style="zoom:100%;" />
 
 ##### 测试ray集群是否可用
 
@@ -93,7 +93,7 @@ python hello_world.py
 
 结果如下：
 
-<img src="C:\Users\DELL\Desktop\ray部署及测试\src\2.png">
+<img src=".\src\2.png">
 
 说明ray的集群部署成功
 
@@ -125,7 +125,7 @@ ray start --head --port=6379 --include-dashboard=true --dashboard-host=0.0.0.0 -
 
 结果如下：
 
-<img src="C:\Users\DELL\Desktop\ray部署及测试\src\7.png">
+<img src=".\src\7.png">
 
 ##### 打开另一个Docker创建从节点
 
@@ -139,6 +139,6 @@ ray start --address='172.17.0.2:6379'
 ray status
 ```
 
-<img src="C:\Users\DELL\Desktop\ray部署及测试\src\9.png">
+<img src=".\src\9.png">
 
 显示有两个节点，说明基于Docker的Ray部署成功。
