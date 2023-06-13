@@ -43,7 +43,7 @@ print("duration = "+ str(duration))
 
 运行结果：
 
-<img src="C:\Users\DELL\Desktop\ray部署及测试\src\4.png">
+<img src=".\src\4.png">
 
 使用单机版ray，程序修改为并行计算的结构，**程序2**的代码如下：
 
@@ -99,7 +99,7 @@ print("duration = "+ str(duration))
 
 运行结果：
 
-<img src="C:\Users\DELL\Desktop\ray部署及测试\src\5.png">
+<img src=".\src\5.png">
 
 结果令人意想不到，使用并行计算之后，程序的运行时间暴涨，通过查阅资料，得知创建任务也需要一定的开销，程序2会创建$n^2$个任务，当$n=100$时任务的数量就是10000个，但每个任务实际上只执行了100个乘法运算（加法忽略），这说明任务创建的开销甚至比任务执行的开销还要大，导致了程序2的执行时间要远高于程序1。将调整，将并行计算的任务修改为**程序3：**
 
@@ -146,9 +146,9 @@ duration = (time.time() - tic)
 print("duration = "+ str(duration))
 ```
 
-运行结果如下
+运行结果如下:
 
-<img src="C:\Users\DELL\Desktop\ray部署及测试\src\6.png">
+<img src=".\src\6.png">
 
 相较于程序2，程序3只会创建100个任务，且每个任务会执行10000个乘法运算，任务创建开销远小于任务开销，效果也是非常显著，程序3的运行速度是程序2的十几倍，程序1的2倍以上。并行计算任务的性能得到了极大的优化（远远大于20%）。
 
@@ -167,7 +167,7 @@ print("duration = "+ str(duration))
 
 ray集群部署如下：
 
-<img src="C:\Users\DELL\Desktop\ray部署及测试\src\10.png">
+<img src=".\src\10.png">
 
 ##### 使用程序3进行任务运行时间和吞吐量的测试和分析
 
@@ -196,7 +196,7 @@ ray start --head --port=6379 --include-dashboard=true --dashboard-host=0.0.0.0 -
 
 结果如下：
 
-<img src="C:\Users\DELL\Desktop\ray部署及测试\src\7.png">
+<img src=".\src\7.png">
 
 ##### 打开另一个Docker创建从节点
 
@@ -210,13 +210,13 @@ ray start --address='172.17.0.2:6379'
 ray status
 ```
 
-<img src="C:\Users\DELL\Desktop\ray部署及测试\src\9.png">
+<img src=".\src\9.png">
 
 显示有两个节点，说明基于Docker的Ray部署成功。
 
 ##### 单节点程序运行时间（$800  \times 800$）
 
-<img src="C:\Users\DELL\Desktop\ray部署及测试\src\8.png">
+<img src=".\src\8.png">
 
 ##### 使用程序3进行任务运行时间和吞吐量的测试和分析（两个节点）
 
