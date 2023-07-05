@@ -187,8 +187,8 @@ impl From<TaskHandle> for Weak<RwLock<TCB>> {
 }
 
 pub fn RecordReadyPriority(priority: UBaseType_t) {
-    if priority > get_top_ready_priority!() {
-        set_top_ready_priority!($priority);
+    if priority > GetTopReadyPriority!() {
+        SetTopReadyPriority!($priority);
     }
 }
 
@@ -285,6 +285,7 @@ impl TaskHandle {
     }
 
     pub fn AddTaskToReadyList(&self) -> Result<(), FreeRtosError> {
+        //该任务本来就已经存在，只是可能从其他地方（比如阻塞队列）中移动到ReadyList
         //从Handle获取TCB
         let tcb = self.GetTCB_read(self);
         let priority = self.GetPriority();
@@ -306,48 +307,47 @@ impl TaskHandle {
         //C语言宏接口
         taskENTER_CRITICAL!();
         {
-            //通过全局变量获取并设定current_task数量
-            let CurrentNumber = get_current_number_of_tasks!() + 1;
-            set_current_number_of_tasks!(CurrentNumber);
+            //通过全局变量获取并设定当前所有列表Task总数数量
+            let CurrentNumber = GetCurrentNumberOfTasks!() + 1;
+            SetCurrentNumberOfTasks!(CurrentNumber);
 
-            
             if task_global::CURRENT_TCB.read().unwrap().is_none() {
                 //如果现在没有currenttskhandle
                 //那就把newtcb这个tskhandle设定为currenttskhandle
-                set_current_task_handle!(self.clone());
-                if get_current_number_of_tasks!() != 1 {
-                    mtCOVERAGE_TEST_MARKER!(); // What happened?
+                SetCurrentTaskHandle!(self.clone());
+                if GetCurrentNumberOfTasks!() != 1 {
+                    DebugPrint!();
                 }
             } else {
                 //如果现在有currenttskhandle
-                let tskhandle = get_current_task_handle!();
-                if !get_scheduler_running!() {
+                let tskhandle = GetCurrentTaskHandle!();
+                if !GetSchedulerRunning!() {
                     //如果现在调度器没启动，并且newtcb优先就高于currenttsk，那就用这个newtcb作为启动task
                     if tskhandle.GetPriority() <= newtcb.Priority {
-                        set_current_task_handle!(self.clone());
+                        SetCurrentTaskHandle!(self.clone());
                     } else {
-                        mtCOVERAGE_TEST_MARKER!();
+                        DebugPrint!();
                     }
                 }
             }
             //获取task总数
-            set_task_number!(get_task_number!() + 1);
+            SetTaskNumber!(GetTaskNumber!() + 1);
             traceTASK_CREATE!(self.clone());
             self.AddTaskToReadyList()?;
         }
         //C语言宏接口
         taskEXIT_CRITICAL!();
-        if get_scheduler_running!() {
+        if GetSchedulerRunning!() {
             //如果调度器启动了，而currenttsk优先级低于newtcb，那就中断抢占
-            let current_task_priority = get_current_task_handle!().GetPriority();
+            let current_task_priority = GetCurrentTaskHandle!().GetPriority();
             if current_task_priority < newtcb.Priority {
                 //C语言接口
                 taskYIELD_IF_USING_PREEMPTION!();
             } else {
-                mtCOVERAGE_TEST_MARKER!();
+                DebugPrint!();
             }
         } else {
-            mtCOVERAGE_TEST_MARKER!();
+            DebugPrint!();
         }
     
         Ok(())
@@ -358,10 +358,10 @@ impl TaskHandle {
 //xTaskAbortDelay()强制任务离开阻塞状态并进入就绪状态。
 //即使任务处于阻塞状态等待的事件未发生，且任何指定的超时时间未过期，也将离开阻塞
 pub fn AddCurrentTaskToDelayedList(ticks_to_wait: TickType_t, can_block_indefinitely: bool) {
-    let curtskhandle = get_current_task_handle!();
+    let curtskhandle = GetCurrentTaskHandle!();
     trace!("Remove succeeded");
 
-    {
+    {//设置标志位，表示成功abort
         #![cfg(feature = "INCLUDE_xTaskAbortDelay")]
         curtskhandle.SetDelayAborted(false);
     }
@@ -372,17 +372,17 @@ pub fn AddCurrentTaskToDelayedList(ticks_to_wait: TickType_t, can_block_indefini
         trace!("Returned 0");
         //成功移除
         //重新设置Ready List的最高优先级
-        portRESET_READY_PRIORITY!(curtskhandle.GetPriority(), get_top_ready_priority!());
+        portRESET_READY_PRIORITY!(curtskhandle.GetPriority(), GetTopReadyPriority!());
     } else {
         trace!("Returned not 0");
-        mtCOVERAGE_TEST_MARKER!();
+        DebugPrint!();
     }
 
     trace!("Remove succeeded");
     {
         //INCLUDE_vTaskSuspend被定义的情况：
         #![cfg(feature = "INCLUDE_vTaskSuspend")]
-        //INCLUDE_vTaskSuspend光被定义还没用，还需要判断portMAX_DELA和can_block_indefinitely
+        //INCLUDE_vTaskSuspend光被定义还没用，还需要判断portMAX_DELAY和can_block_indefinitely
         if ticks_to_wait == portMAX_DELAY && can_block_indefinitely {
             //将任务添加到Suspended List而不是Delayed List
             //确保它永久阻塞而不会被时钟唤醒
@@ -391,12 +391,12 @@ pub fn AddCurrentTaskToDelayedList(ticks_to_wait: TickType_t, can_block_indefini
         } else {
             //否则，函数会计算任务应该在什么时候被唤醒（如果事件没有发生）
             //并根据唤醒时间将任务添加到不同的延迟任务列表中
-            let time_to_wake = get_tick_count!() + ticks_to_wait;
+            let time_to_wake = GetTickCount!() + ticks_to_wait;
 
             let cur_state_list_item = curtskhandle.GetStateListItem();
             list::listSET_LIST_ITEM_VALUE(&cur_state_list_item, time_to_wake);
 
-            if time_to_wake < get_tick_count!() {
+            if time_to_wake < GetTickCount!() {
                 //如果唤醒时间小于当前时间，则将任务添加到溢出延迟任务列表中
                 list::vListInsert(&OVERFLOW_DELAYED_TASK_LIST, cur_state_list_item);
             } else {
@@ -406,9 +406,9 @@ pub fn AddCurrentTaskToDelayedList(ticks_to_wait: TickType_t, can_block_indefini
                 //如果任务被添加到了延迟任务列表的头部
                 //那么xNextTaskUnblockTime需要被更新
                 if time_to_wake < get_next_task_unblock_time!() {
-                    set_next_task_unblock_time!(time_to_wake);
+                    SetNextTaskUnblockTime!(time_to_wake);
                 } else {
-                    mtCOVERAGE_TEST_MARKER!();
+                    DebugPrint!();
                 }
             }
         }
@@ -419,12 +419,12 @@ pub fn AddCurrentTaskToDelayedList(ticks_to_wait: TickType_t, can_block_indefini
         #![cfg(not(feature = "INCLUDE_vTaskSuspend"))]
         //计算任务应该在什么时候被唤醒（如果事件没有发生）
         //并根据唤醒时间将任务添加到适当的延迟任务列表中
-        let time_to_wake = get_tick_count!() + ticks_to_wait;
+        let time_to_wake = GetTickCount!() + ticks_to_wait;
 
         let cur_state_list_item = curtskhandle.GetStateListItem();
         list::listSET_LIST_ITEM_VALUE(&cur_state_list_item, time_to_wake);
 
-        if time_to_wake < get_tick_count!() {
+        if time_to_wake < GetTickCount!() {
            //如果唤醒时间小于当前时间，则将任务添加到溢出延迟任务列表中
             list::vListInsert(&OVERFLOW_DELAYED_TASK_LIST, cur_state_list_item);
         } else {
@@ -434,9 +434,9 @@ pub fn AddCurrentTaskToDelayedList(ticks_to_wait: TickType_t, can_block_indefini
             //如果任务被添加到了延迟任务列表的头部
             //那么xNextTaskUnblockTime需要被更新
             if time_to_wake < get_next_task_unblock_time!() {
-                set_next_task_unblock_time!(time_to_wake);
+                SetNextTaskUnblockTime!(time_to_wake);
             } else {
-                mtCOVERAGE_TEST_MARKER!();
+                DebugPrint!();
             }
         }
     }
@@ -447,17 +447,17 @@ pub fn ResetNextTaskUnblockTime() {
     if list_is_empty(&DELAYED_TASK_LIST) {
         //检查DELAYED_TASK_LIST是否为空
         //如果为空，则将 xNextTaskUnblockTime 设置为最大可能值
-        set_next_task_unblock_time!(portMAX_DELAY);
+        SetNextTaskUnblockTime!(portMAX_DELAY);
     } else {
         //如果DELAYED_TASK_LIST不为空
         //就把xNextTaskUnblockTime设置为该列表头结点的等待时间
         let mut temp = get_owner_of_head_entry(&DELAYED_TASK_LIST);
-        set_next_task_unblock_time!(get_list_item_value(&temp.GetStateListItem()));
+        SetNextTaskUnblockTime!(get_list_item_value(&temp.GetStateListItem()));
     }
 }
 
 #[cfg(feature = "INCLUDE_vTaskDelete")]
-pub fn task_delete(task_to_delete: Option<TaskHandle>) {
+pub fn TaskDelete(task_to_delete: Option<TaskHandle>) {
     //如果NULL被传入，就删除calling task
     let pxtcb = GetHandleFromOption!(task_to_delete);
 
@@ -468,7 +468,7 @@ pub fn task_delete(task_to_delete: Option<TaskHandle>) {
             //重新设置优先级
             taskRESET_READY_PRIORITY!(pxtcb.GetPriority());
         } else {
-            mtCOVERAGE_TEST_MARKER!();
+            DebugPrint!();
         }
 
         //接下来检查任务是否在等待事件
@@ -476,13 +476,13 @@ pub fn task_delete(task_to_delete: Option<TaskHandle>) {
         if list::get_list_item_container(&pxtcb.GetEventListItem()).is_some() {
             list::uxListRemove(pxtcb.GetEventListItem());
         } else {
-            mtCOVERAGE_TEST_MARKER!();
+            DebugPrint!();
         }
 
         //递增全局变量uxTaskNumber，以便内核感知调试器能够检测到任务列表需要重新生成。
-        set_task_number!(get_task_number!() + 1);
+        SetTaskNumber!(GetTaskNumber!() + 1);
 
-        if pxtcb == get_current_task_handle!() {
+        if pxtcb == GetCurrentTaskHandle!() {
             //检查要删除的任务是否是当前正在运行的任务
             //如果是，则将该任务插入到等待终止的任务列表中
             //以便空闲任务能够检查该列表并释放调度器为TCB和堆栈分配的内存。
@@ -498,7 +498,7 @@ pub fn task_delete(task_to_delete: Option<TaskHandle>) {
             portPRE_TASK_DELETE_HOOK!(pxtcb, get_yield_pending!());
         } else {
             //如果要删除的任务不是当前正在运行的任务，则递减全局变量uxCurrentNumberOfTasks
-            set_current_number_of_tasks!(get_current_number_of_tasks!() - 1);
+            SetCurrentNumberOfTasks!(GetCurrentNumberOfTasks!() - 1);
 
             //释放堆栈所占用的内存
             let StackPointer = pxtcb.GetTCB_read().StackPointer;
@@ -512,18 +512,18 @@ pub fn task_delete(task_to_delete: Option<TaskHandle>) {
 
     //如果删除的任务是当前执行的任务，需要reschedule
     if get_scheduler_suspended!() > 0 {
-        if pxtcb == get_current_task_handle!() {
+        if pxtcb == GetCurrentTaskHandle!() {
             assert!(get_scheduler_suspended!() == 0);
             portYIELD_WITHIN_API!();
         } else {
-            mtCOVERAGE_TEST_MARKER!();
+            DebugPrint!();
         }
     }
 }
 
 #[cfg(feature = "INCLUDE_vTaskSuspend")]
-pub fn suspend_task(task_to_suspend: TaskHandle) {
-    trace!("suspend_task called!");
+pub fn SuspendTask(task_to_suspend: TaskHandle) {
+    trace!("SuspendTask called!");
     
     let mut tcb = task_to_suspend.GetTCB_read();
     taskENTER_CRITICAL!();
@@ -534,21 +534,21 @@ pub fn suspend_task(task_to_suspend: TaskHandle) {
         if list_remove(tcb.GetStateListItem()) == 0 {
             taskRESET_READY_PRIORITY!(tcb.GetPriority());
         } else {
-            mtCOVERAGE_TEST_MARKER!();
+            DebugPrint!();
         }
 
         //从事件列表中移除
         if get_list_item_container(&tcb.GetEventListItem()).is_some() {
             list_remove(tcb.GetEventListItem());
         } else {
-            mtCOVERAGE_TEST_MARKER!();
+            DebugPrint!();
         }
         //加入SUSPEND列表
         list_insert_end(&SUSPENDED_TASK_LIST, tcb.GetStateListItem());
     }
     taskEXIT_CRITICAL!();
 
-    if get_scheduler_running!() {
+    if GetSchedulerRunning!() {
         //修改next_task_unblock_time
         taskENTER_CRITICAL!();
         {
@@ -556,24 +556,24 @@ pub fn suspend_task(task_to_suspend: TaskHandle) {
         }
         taskEXIT_CRITICAL!();
     } else {
-        mtCOVERAGE_TEST_MARKER!();
+        DebugPrint!();
     }
 
-    if task_to_suspend == get_current_task_handle!() {
-        if get_scheduler_running!() {
+    if task_to_suspend == GetCurrentTaskHandle!() {
+        if GetSchedulerRunning!() {
             //如果Scheduler开启了，且该任务为正在执行的任务
             assert!(get_scheduler_suspended!() == 0);
             portYIELD_WITHIN_API!();
         } else {
             //如果Scheduler没有开启，而且pxCurrentTCB所指向的任务被suspend了
             //需要重新设定pxCurrentTCB
-            if current_list_length(&SUSPENDED_TASK_LIST) != get_current_number_of_tasks!() {
+            if current_list_length(&SUSPENDED_TASK_LIST) != GetCurrentNumberOfTasks!() {
                 //如果不是所有任务都被suspend，那就进行上下文切换
                 task_switch_context();
             }
         }
     } else {
-        mtCOVERAGE_TEST_MARKER!();
+        DebugPrint!();
     }
 }
 
@@ -593,13 +593,13 @@ pub fn IsTaskSuspended(task: &TaskHandle) -> bool {
             if get_list_item_container(&tcb.GetEventListItem()).is_none() {
                 xreturn = true;
             } else {
-                mtCOVERAGE_TEST_MARKER!();
+                DebugPrint!();
             }
         } else {
-            mtCOVERAGE_TEST_MARKER!();
+            DebugPrint!();
         }
     } else {
-        mtCOVERAGE_TEST_MARKER!();
+        DebugPrint!();
     }
 
     xreturn
@@ -611,7 +611,7 @@ pub fn ResumeTask(task_to_resume: TaskHandle) {
     trace!("resume task called!");
     let mut tcb = task_to_resume.GetTCB_read();
 
-    if task_to_resume != get_current_task_handle!() {
+    if task_to_resume != GetCurrentTaskHandle!() {
         //检查要恢复的任务是否为当前正在执行的任务，如果不是的情况：
         taskENTER_CRITICAL!();
         {
@@ -623,23 +623,22 @@ pub fn ResumeTask(task_to_resume: TaskHandle) {
                 list_remove(tcb.GetStateListItem());
                 task_to_resume.AddTaskToReadyList();
 
-                let current_task_priority = get_current_task_handle!().GetPriority();
-                /* We may have just resumed a higher priority task. */
+                let current_task_priority = GetCurrentTaskHandle!().GetPriority();
                 if tcb.GetPriority() >= current_task_priority {
                     //检查要恢复的任务的优先级是否大于或等于当前任务的优先级
                     //如果是，则使用宏taskYIELD_IF_USING_PREEMPTION!()触发上下文切换
                     taskYIELD_IF_USING_PREEMPTION!();
                 } else {
-                    mtCOVERAGE_TEST_MARKER!();
+                    DebugPrint!();
                 }
             } else {
-                mtCOVERAGE_TEST_MARKER!();
+                DebugPrint!();
             }
         }
         taskEXIT_CRITICAL!();
     } else {
         //检查要恢复的任务是否为当前正在执行的任务，如果是，那根本不用resume
-        mtCOVERAGE_TEST_MARKER!();
+        DebugPrint!();
     }
 }
 
@@ -648,7 +647,7 @@ macro_rules! GetHandleFromOption {
     ($option: expr) => {
         match $option {
             Some(handle) => handle,
-            None => get_current_task_handle!(),
+            None => GetCurrentTaskHandle!(),
         }
     };
 }
@@ -664,7 +663,7 @@ impl TaskHandle{
         if NewPriority >= configMAX_PRIORITIES!() as UBaseType_t {
             NewPriority = configMAX_PRIORITIES!() as UBaseType_t - 1 as UBaseType_t;
         } else {
-            mtCOVERAGE_TEST_MARKER!();
+            DebugPrint!();
         }
     
         taskENTER_CRITICAL!();
@@ -695,14 +694,14 @@ impl TaskHandle{
             if CurrentBasePriority != NewPriority {
                 //如果该任务不是正在执行的任务
                 //且优先级比现在正在执行的任务优先级高，Yield = 1
-                if pxTCB != get_current_task_handle!() {
+                if pxTCB != GetCurrentTaskHandle!() {
                     if NewPriority >= get_current_task_priority!() {
                         YieldRequired = true;
                     } else {
-                        mtCOVERAGE_TEST_MARKER!();
+                        DebugPrint!();
                     }
                 }
-            } else if pxTCB == get_current_task_handle!() {
+            } else if pxTCB == GetCurrentTaskHandle!() {
                 //如果该任务是正在执行的任务
                 //而且优先级改变了，Yield = 1
                 YieldRequired = true;
@@ -713,7 +712,7 @@ impl TaskHandle{
                 if pxTCB.GetBasePriority() == pxTCB.GetPriority() {
                     pxTCB.SetPriority(NewPriority);
                 } else {
-                    mtCOVERAGE_TEST_MARKER!();
+                    DebugPrint!();
                 }
                 pxTCB.SetBasePriority(NewPriority);
             }
@@ -731,7 +730,7 @@ impl TaskHandle{
                     (configMAX_PRIORITIES!() as TickType_t - NewPriority as TickType_t),
                 );
             } else {
-                mtCOVERAGE_TEST_MARKER!();
+                DebugPrint!();
             }
     
             if list::is_contained_within(
@@ -744,19 +743,19 @@ impl TaskHandle{
                     //如果移除后就绪任务列表为空，则使用 portRESET_READY_PRIORITY!() 宏重置就绪任务优先级
                     portRESET_READY_PRIORITY!(PriorityUsedOnEntry, uxTopReadyPriority);
                 } else {
-                    mtCOVERAGE_TEST_MARKER!();
+                    DebugPrint!();
                 }
                 //将任务重新添加到就绪任务列表
                 pxTCB.AddTaskToReadyList();
             } else {
-                mtCOVERAGE_TEST_MARKER!();
+                DebugPrint!();
             }
     
             if YieldRequired != false {
                 //Yield = 1时，如果支持抢占，那就抢占
                 taskYIELD_IF_USING_PREEMPTION!();
             } else {
-                mtCOVERAGE_TEST_MARKER!();
+                DebugPrint!();
             }
         }
     
