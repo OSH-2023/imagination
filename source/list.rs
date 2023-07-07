@@ -1,14 +1,20 @@
+/// 
+/// pub type ListItem_t = xLIST_ITEM;
+/// pub type ItemLink = Arc<RwLock<ListItem_t>>;
+/// pub type WeakItemLink = Weak<RwLock<ListItem_t>>;
+/// 
+/// pub type List_t = xLIST;
+/// pub type ListLink = Arc<RwLock<List_t>>;
+/// pub type WeakListLink = Weak<RwLock<List_t>>;
+
+
 use std::sync::{Arc, RwLock, Weak};
 
 use crate::port::{portMAX_DELAY, TickType_t, UBaseType_t};
-
-pub struct TCB
-{
-    temp: i32,
-}
+use crate::task::{TCB, TaskHandle};
 
 /// 暂时未实现：listGET_NEXT listGET_END_MARKER
-/// owner 相关
+/// not varified: TCB、 TaskHandle
 
 pub struct xLIST_ITEM
 {
@@ -68,10 +74,10 @@ impl xLIST_ITEM {
         self.xItemValue = item_value;
     }
 
-    /*pub fn owner(mut self, owner: TaskHandle) -> Self {
+    pub fn owner(mut self, owner: TaskHandle) -> Self {
         self.pvOwner = owner.into();
         self
-    }*/
+    }
 
     pub fn set_container(&mut self, container: &Arc<RwLock<List_t>>) {
         self.pvContainer = Arc::downgrade(container);
@@ -250,11 +256,11 @@ impl xLIST {
         }
     }
 
-    /* 
+    
     fn get_owner_of_next_entry(&mut self) -> Weak<RwLock<TCB>> {
         self.increment_index();
         let owned_index = self
-            .index
+            .pxIndex
             .upgrade()
             .unwrap_or_else(|| panic!("List item is None"));
         let owner = Weak::clone(&owned_index.read().unwrap().owner);
@@ -262,14 +268,14 @@ impl xLIST {
     }
 
     fn get_owner_of_head_entry(&self) -> Weak<RwLock<TCB>> {
-        let list_end = get_list_item_next(&Arc::downgrade(&self.list_end));
+        let list_end = get_list_item_next(&Arc::downgrade(&self.xListEnd));
         let owned_index = list_end
             .upgrade()
             .unwrap_or_else(|| panic!("List item is None"));
         let owner = Weak::clone(&owned_index.read().unwrap().owner);
         owner
     }
-    */
+    
 }
 
 // 替换 item.pxNext = next;
@@ -367,14 +373,14 @@ pub fn listCURRENT_LIST_LENGTH(list: &ListLink) -> UBaseType_t {
     list.read().unwrap().get_length()
 }
 
-/*
+
 pub fn get_list_item_owner(item_link: &ItemLink) -> TaskHandle {
-    let owner = Weak::clone(&item_link.read().unwrap().owner);
+    let owner = Weak::clone(&item_link.read().unwrap().pvOwner);
     owner.into()
 }
 
 pub fn set_list_item_owner(item_link: &ItemLink, owner: TaskHandle) {
-    item_link.write().unwrap().owner = owner.into()
+    item_link.write().unwrap().pvOwner = owner.into()
 } 
 
 pub fn get_owner_of_next_entry(list: &ListLink) -> TaskHandle {
@@ -386,7 +392,7 @@ pub fn get_owner_of_head_entry(list: &ListLink) -> TaskHandle {
     let task = list.read().unwrap().get_owner_of_head_entry();
     task.into()
 }
-*/
+
 
 pub fn is_contained_within(list: &ListLink, item_link: &ItemLink) -> bool {
     match get_list_item_container(&item_link) {
