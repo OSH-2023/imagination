@@ -1,35 +1,21 @@
 // kernel.rs, FreeRTOS scheduler control APIs.
-// This file is created by Fan Jinhao.
-// Functions defined in this file are explained in Chapter 9 and 10.
+
 use crate::list;
 use crate::port::UBaseType_t;
 use crate::projdefs::pdFALSE;
 use crate::task::{TaskHandle, TCB};
 use crate::task_global::*;
-use crate::*; // TODO: Is this line necessary?
-              // use crate::task_control::TCB;
+use crate::*; 
 
-/* Definitions returned by xTaskGetSchedulerState().
- * The originial definitons are C constants, we changed them to enums.
- */
-
+// returned by xTaskGetSchedulerState()
 pub enum SchedulerState {
     NotStarted,
     Suspended,
     Running,
 }
 
-/// Macro for forcing a context switch.
-///
-/// * Implemented by: Fan Jinhao.
-/// * C implementation:
-///
-/// # Arguments
-///
-///
-/// # Return
-///
-/// Nothing
+
+// 宏定义：上下文切换
 #[macro_export]
 macro_rules! taskYIELD {
     () => {
@@ -45,20 +31,7 @@ macro_rules! taskYIELD_IF_USING_PREEMPTION {
     };
 }
 
-/// Macro to mark the start of a critical code region.  Preemptive context
-/// switches cannot occur when in a critical region.
-///
-/// NOTE: This may alter the stack (depending on the portable implementation)
-/// so must be used with care!
-/// * Implemented by: Fan Jinhao.
-/// * C implementation:
-///
-/// # Arguments
-///
-///
-/// # Return
-///
-/// Nothing
+// 宏定义：进入临界区
 #[macro_export]
 macro_rules! taskENTER_CRITICAL {
     () => {
@@ -73,19 +46,7 @@ macro_rules! taskENTER_CRITICAL_FROM_ISR {
     };
 }
 
-/// Macro to mark the end of a critical code region.  Preemptive context
-/// switches cannot occur when in a critical region.
-///
-/// NOTE: This may alter the stack (depending on the portable implementation)
-/// so must be used with care!
-/// * Implemented by: Fan Jinhao.
-/// * C implementation:
-///
-/// # Arguments
-///
-///
-/// # Return
-///
+// 宏定义：退出临界区
 /// Nothing
 #[macro_export]
 macro_rules! taskEXIT_CRITICAL {
@@ -101,16 +62,7 @@ macro_rules! taskEXIT_CRITICAL_FROM_ISR {
     };
 }
 
-/// Macro to disable all maskable interrupts.
-/// * Implemented by: Fan Jinhao.
-/// * C implementation: task.h
-///
-/// # Arguments
-///
-/// # Return
-///
-/// Nothing
-
+// 宏定义：禁中断
 #[macro_export]
 macro_rules! taskDISABLE_INTERRUPTS {
     () => {
@@ -118,17 +70,7 @@ macro_rules! taskDISABLE_INTERRUPTS {
     };
 }
 
-/// Macro to enable microcontroller interrupts.
-///
-/// * Implemented by: Fan Jinhao.
-/// * C implementation: task.h
-///
-/// # Arguments
-///
-/// # Return
-///
-/// Nothing
-
+// 宏定义：使能中断
 #[macro_export]
 macro_rules! taskENABLE_INTERRUPTS {
     () => {
@@ -136,23 +78,7 @@ macro_rules! taskENABLE_INTERRUPTS {
     };
 }
 
-///
-/// Starts the real time kernel tick processing.  After calling the kernel
-/// has control over which tasks are executed and when.
-///
-/// See the demo application file main.c for an example of creating
-/// tasks and starting the kernel.
-///
-/// * Implemented by: Fan Jinhao.
-/// * C implementation:
-///
-/// # Arguments
-///
-///
-/// # Return
-///
-/// Nothing
-///
+// 开始调度任务
 pub fn TaskStartScheduler() {
     CreateIdleTask();
 
@@ -162,47 +88,24 @@ pub fn TaskStartScheduler() {
     InitializeScheduler();
 }
 
-/// The fist part of TaskStartScheduler(), creates the idle task.
-/// Will panic if task creation fails.
-/// * Implemented by: Fan Jinhao.
-/// * C implementation: tasks.c 1831-1866
-///
-/// # Arguments
-///
-///
-/// # Return
-///
-/// Nothing
+// 创建 idle task.
 pub fn CreateIdleTask() -> TaskHandle {
     println!("number: {}", get_current_number_of_tasks!());
     let idle_task_fn = || {
         loop {
             trace!("Idle Task running");
-            /* THIS IS THE RTOS IDLE TASK - WHICH IS CREATED AUTOMATICALLY WHEN THE
-            SCHEDULER IS STARTED. */
 
-            /* See if any tasks have deleted themselves - if so then the idle task
-            is responsible for freeing the deleted task's TCB and stack. */
+            // 检测是否有任务结束；若有，则释放其 TCB 与栈
             CheckTasksWaitingTermination();
 
-            /* If we are not using preemption we keep forcing a task switch to
-            see if any other task has become available.  If we are using
-            preemption we don't need to do this as any task becoming available
-            will automatically get the processor anyway. */
+            // 不使能抢占时，应在此处切换任务
             #[cfg(not(feature = "configUSE_PREEMPTION"))]
             taskYIELD!();
 
             {
                 #![cfg(all(feature = "configUSE_PREEMPTION", feature = "configIDLE_SHOULD_YIELD"))]
-                /* When using preemption tasks of equal priority will be
-                timesliced.  If a task that is sharing the idle priority is ready
-                to run then the idle task should yield before the end of the
-                timeslice.
-
-                A critical region is not required here as we are just reading from
-                the list, and an occasional incorrect value will not matter.  If
-                the ready list at the idle priority contains more than one task
-                then a task other than the idle task is ready to execute. */
+                // 当使用抢占式调度时，相同优先级的任务会进行时间片轮转。
+                // 如果一个与空闲优先级共享的任务准备好运行，那么空闲任务应该在时间片结束之前主动让出CPU
                 if list::listCURRENT_LIST_LENGTH(&READY_TASK_LISTS[0]) > 1 {
                     taskYIELD!();
                 } else {
@@ -215,11 +118,7 @@ pub fn CreateIdleTask() -> TaskHandle {
                 // TODO: Use IdleHook
                 // extern void vApplicationIdleHook( void );
 
-                /* Call the user defined function from within the idle task.  This
-                allows the application designer to add background functionality
-                without the overhead of a separate task.
-                NOTE: vApplicationIdleHook() MUST NOT, UNDER ANY CIRCUMSTANCES,
-                CALL A FUNCTION THAT MIGHT BLOCK. */
+                // 在空闲任务中调用用户定义的函数。可用于添加后台功能
                 // vApplicationIdleHook();
                 trace!("Idle Task running");
             }
@@ -237,159 +136,66 @@ fn CheckTasksWaitingTermination() {
     // TODO: Wait for task_delete.
 }
 
-/// The second (optional) part of TaskStartScheduler(),
-/// creates the timer task. Will panic if task creation fails.
-/// * Implemented by: Fan Jinhao.
-/// * C implementation: tasks.c 1868-1879
-///
-/// # Arguments
-///
-///
-/// # Return
-///
-/// Nothing
+// 创建 timer task
 fn CreateTimerTask() {
     // TODO: This function relies on the software timer, which we may not implement.
     // timer::CreateTimerTask()
     // On fail, panic!("No enough heap space to allocate timer task.");
 }
 
-/// The third part of task_step_scheduler, do some initialziation
-/// and call port_start_scheduler() to set up the timer tick.
+/// 开始调度，调用 port_start_scheduler() ，不会返回
 /// vTaskStartScheduler()
 fn InitializeScheduler() {
-    /* Interrupts are turned off here, to ensure a tick does not occur
-    before or during the call to xPortStartScheduler().  The stacks of
-    the created tasks contain a status word with interrupts switched on
-    so interrupts will automatically get re-enabled when the first task
-    starts to run. */
+    // 禁中断
+    // 第一个任务开始时，会自动启用中断
     portDISABLE_INTERRUPTS!();
-
-    // TODO: NEWLIB
 
     set_next_task_unblock_time!(port::portMAX_DELAY);
     set_scheduler_running!(true);
     set_tick_count!(0);
 
-    /* If configGENERATE_RUN_TIME_STATS is defined then the following
-    macro must be defined to configure the timer/counter used to generate
-    the run time counter time base. */
+    
+    // 如果定义了configGENERATE_RUN_TIME_STATS，则必须定义以下宏来配置用于生成运行时间计数器时间基准的定时器/计数器
     portCONFIGURE_TIMER_FOR_RUN_TIME_STATS!();
 
-    // 启动调度器 
-    /* Setting up the timer tick is hardware specific and thus in the
-    portable interface. */
+    // 启动调度器，调用外部接口（涉及硬件操作）
     if port::port_start_scheduler() != pdFALSE {
-        /* Should not reach here as if the scheduler is running the
-        function will not return. */
+        // 不应运行到这里
     } else {
-        // TODO: Maybe a trace here?
-        /* Should only reach here if a task calls xTaskEndScheduler(). */
+        // 当有任务调用 xTaskEndScheduler() 后运行到这里
     }
 }
 
-/// NOTE:  At the time of writing only the x86 real mode port, which runs on a PC
-/// in place of DOS, implements this function.
-///
-/// Stops the real time kernel tick.  All created tasks will be automatically
-/// deleted and multitasking (either preemptive or cooperative) will
-/// stop.  Execution then resumes from the point where vTaskStartScheduler ()
-/// was called, as if vTaskStartScheduler () had just returned.
-///
-/// See the demo application file main. c in the demo/PC directory for an
-/// example that uses vTaskEndScheduler ().
-///
-/// vTaskEndScheduler () requires an exit function to be defined within the
-/// portable layer (see vPortEndScheduler () in port. c for the PC port).  This
-/// performs hardware specific operations such as stopping the kernel tick.
-///
-/// vTaskEndScheduler () will cause all of the resources allocated by the
-/// kernel to be freed - but will not free resources allocated by application
-/// tasks.
-///
-/// * Implemented by: Fan Jinhao.
-/// * C implementation:
-///
-/// # Arguments
-///
-///
-/// # Return
-///
-/// Nothing
-
+// 终止
 pub fn TaskEndScheduler() {
-    /* Stop the scheduler interrupts and call the portable scheduler end
-    routine so the original ISRs can be restored if necessary.  The port
-    layer must ensure interrupts enable bit is left in the correct state. */
+    // 停止调度器中断，并调用外部调度器结束接口
     portDISABLE_INTERRUPTS!();
     set_scheduler_running!(false);
     port::port_end_scheduler();
 }
 
-/// Suspends the scheduler without disabling interrupts.  Context switches will
-/// not occur while the scheduler is suspended.
-///
-/// After calling vTaskSuspendAll () the calling task will continue to execute
-/// without risk of being swapped out until a call to xTaskResumeAll () has been
-/// made.
-///
-/// API functions that have the potential to cause a context switch (for example,
-/// vTaskDelayUntil(), xQueueSend(), etc.) must not be called while the scheduler
-/// is suspended.
-///
-/// * Implemented by: Fan Jinhao.
-/// * C implementation:
-///
-/// # Arguments
-///
-///
-/// # Return
-///
-/// Nothing
+// 暂停调度器，此时不发生上下文切换
 pub fn TaskSuspendAll() {
-    /* A critical section is not required as the variable is of type
-    BaseType_t.  Please read Richard Barry's reply in the following link to a
-    post in the FreeRTOS support forum before reporting this as a bug! -
-    http://goo.gl/wu4acr */
-
-    // Increment SCHEDULER_SUSPENDED.
+    // SCHEDULER_SUSPENDED 加 1
     set_scheduler_suspended!(get_scheduler_suspended!() + 1);
 }
 
-/// Resumes scheduler activity after it was suspended by a call to
-/// vTaskSuspendAll().
-///
-/// xTaskResumeAll() only resumes the scheduler.  It does not unsuspend tasks
-/// that were previously suspended by a call to vTaskSuspend().
-/// * Implemented by: Fan Jinhao.
-/// * C implementation:
-///
-/// # Arguments
-///
-///
-/// # Return
-///
-/// If resuming the scheduler caused a context switch then true is
-/// returned, otherwise false is returned.
+// 恢复调度器
+// 若恢复调度器引起了上下文切换，则返回 true
 pub fn TaskResumeAll() -> bool {
     trace!("resume_all called!");
     let mut already_yielded = false;
 
-    // TODO: This is a recoverable error, use Result<> instead.
     assert!(
         get_scheduler_suspended!() > pdFALSE as UBaseType_t,
         "The call to TaskResumeAll() does not match \
          a previous call to vTaskSuspendAll()."
     );
 
-    /* It is possible that an ISR caused a task to be removed from an event
-    list while the scheduler was suspended.  If this was the case then the
-    removed task will have been added to the xPendingReadyList.  Once the
-    scheduler has been resumed it is safe to move all the pending ready
-    tasks from this list into their appropriate ready list. */
+    // 在调度器被暂停期间，可能会发生中断服务程序（ISR）导致任务从事件列表中被移除的情况。如果是这种情况，被移除的任务将会被添加到 xPendingReadyList 中。一旦调度器被恢复，就可以安全地将所有处于等待状态的任务从该列表中移动到相应的就绪列表中。
     taskENTER_CRITICAL!();
     {
-        // Decrement SCHEDULER_SUSPENDED.
+        // SCHEDULER_SUSPENDED 减 1
         set_scheduler_suspended!(get_scheduler_suspended!() - 1);
         println!(
             "get_current_number_of_tasks: {}",
@@ -401,22 +207,13 @@ pub fn TaskResumeAll() -> bool {
                     "Current number of tasks is: {}, move tasks to ready list.",
                     get_current_number_of_tasks!()
                 );
-                /* Move any readied tasks from the pending list into the
-                appropriate ready list. */
+                // 将任何已准备好的任务从等待列表中移动到就绪列表中
                 if MoveTasksToReadyList() {
-                    /* A task was unblocked while the scheduler was suspended,
-                    which may have prevented the next unblock time from being
-                    re-calculated, in which case re-calculate it now.  Mainly
-                    important for low power tickless implementations, where
-                    this can prevent an unnecessary exit from low power
-                    state. */
+                    // 在调度器挂起期间，一个任务被解除阻塞，可能会阻止下一个解除阻塞时间被重新计算，在这种情况下，现在重新计算它
                     ResetNextTaskUnblockTime();
                 }
 
-                /* If any ticks occurred while the scheduler was suspended then
-                they should be processed now.  This ensures the tick count does
-                not slip, and that any delayed tasks are resumed at the correct
-                time. */
+                // 如果在调度器挂起期间发生了任何滴答，则应立即处理它们
                 ProcessPendedTicks();
 
                 if get_yield_pending!() {
@@ -438,30 +235,6 @@ pub fn TaskResumeAll() -> bool {
     trace!("Already yielded is {}", already_yielded);
     already_yielded
 }
-
-
-
-// ***************************************************************************************** //
-// ***************************************************************************************** //
-// ***************************************************************************************** //
-// ***************************************************************************************** //
-// ***************************************************************************************** //
-// ***************************************************************************************** //
-// ***************************************************************************************** //
-// ***************************************************************************************** //
-// ***************************************************************************************** //
-// ***************************************************************************************** //
-// ***************************************************************************************** //
-// ***************************************************************************************** //
-// ***************************************************************************************** //
-// ***************************************************************************************** //
-// ***************************************************************************************** //
-// ***************************************************************************************** //
-// ***************************************************************************************** //
-// ***************************************************************************************** //
-// ***************************************************************************************** //
-// ***************************************************************************************** //
-
 
 
 fn MoveTasksToReadyList() -> bool {
