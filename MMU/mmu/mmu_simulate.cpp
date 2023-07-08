@@ -79,7 +79,9 @@ int address_map(int virtual_address, memory_operation operation)//operation±íÊ¾¶
 	}
 	else memory_hit++;
 	physical_address = currentTCB->page_table[page_number].frame_number * page_size + offset;
+#if(0 == ReplacementStrategy)
 	pMovetoFirst(LRU_list, currentTCB->page_table[page_number].frame_number);
+#endif
 	if (operation == memory_operation::write)
 	{
 		currentTCB->page_table[page_number].dirty = true;
@@ -93,7 +95,12 @@ int address_map(int virtual_address, memory_operation operation)//operation±íÊ¾¶
 
 void pageFault(entry * faultPage, int page_number)
 {
+#if(0 == ReplacementStrategy)
 	LINKNODE endNode = GetEndNode(LRU_list);
+#endif
+#if(1 == ReplacementStrategy)
+	LINKNODE endNode = FIFO_list;
+#endif
 #if(1 == useTLB)
 	if (endNode->task_belonging == currentTCB)//ÕâÖÖÇé¿öÏÂ¿ÉÄÜÐèÒª»ØÐ´¿ì±íÖÐµÄÔàÎ»£¬ÒÔ¼°ÐÞ¸Ä¿ì±íÄÚÈÝ
 	{
@@ -116,8 +123,8 @@ void pageFault(entry * faultPage, int page_number)
 	{
 		int disk_address_out = ((endNode->task_belonging->page_table) + (endNode->page_number))->disk_address;
 		write_to_disk(endNode->frame_number, disk_address_out);
-		((endNode->task_belonging->page_table) + (endNode->page_number))->valid = 0;
 	}
+	((endNode->task_belonging->page_table) + (endNode->page_number))->valid = false;
 	//»»Èë
 	int disk_address_in = faultPage->disk_address;
 	read_to_memory(endNode->frame_number, disk_address_in);
@@ -127,6 +134,9 @@ void pageFault(entry * faultPage, int page_number)
 	//¸üÐÂ½Úµã¶ÔÓ¦Ö¡µÄÐÅÏ¢
 	endNode->task_belonging = currentTCB;
 	endNode->page_number = page_number;
+#if(1 == ReplacementStrategy)
+	FIFO_list = FIFO_list->next;
+#endif
 }
 
 void LRU_list_init(LINKNODE &list)

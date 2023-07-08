@@ -11,6 +11,9 @@ void test_sort();
 void swap(int i, int j);
 void bubbleSort();
 float get_hit_rate(int hit, int miss);
+void test_sort_merge();
+void mergeSort(int left, int right);
+void merge(int left, int mid, int right);
 
 #endif
 

@@ -4,6 +4,7 @@
 using namespace std;
 #include<iostream>
 #include "mmu.h"
+
 typedef struct NODE {
 	int frame_number;
 	struct NODE* next;
@@ -18,5 +19,5 @@ LINKNODE GetEndNode(LINKNODE pHead); //得到末尾节点的指针
 int pTraverseList(LINKNODE pHead);
 
 extern LINKNODE LRU_list;
-
+extern LINKNODE FIFO_list;
 #endif

@@ -8,14 +8,16 @@ using namespace std;
 #include "mmu.h"
 
 #define useTLB	1
+#define ReplacementStrategy 0	//0-LRU，1-FIFO
 
-#define page_size 128   //页大小
-#define memory_size 1024    //内存大小
+#define times 8
+#define page_size (128 * times)  //页大小
+#define memory_size (1024 * times)   //内存大小
 #define memory_frame_size (memory_size / page_size)   //内存页总数
-#define disk_size 4096  //外存大小
-#define virtual_space 2048  //虚拟地址空间
+#define disk_size (4096 * times) //外存大小
+#define virtual_space (2048 * times) //虚拟地址空间
 #define page_table_size (virtual_space / page_size) //页表大小
-#define TLB_size 4  //TLB大小
+#define TLB_size (4 * times) //TLB大小
 #define time_TLB_access 1e-9   //访问TLB时间
 #define time_memory_access 1e-7  //访问memory时间  
 #define	time_cach_access 1e-7	//访问cach时间
@@ -24,7 +26,7 @@ using namespace std;
 
 extern int memory[memory_size];
 extern int disk[disk_size];
-extern line TLB[4];
+extern line TLB[TLB_size];
 extern TCB *currentTCB;
 extern long int TLB_hit;
 extern long int TLB_miss;

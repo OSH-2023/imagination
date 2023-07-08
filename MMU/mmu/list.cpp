@@ -1,5 +1,6 @@
 #include"list.h"
 LINKNODE LRU_list;
+LINKNODE FIFO_list;
 
 //¡¥±Ì≥ı ºªØ
 void pInitList(LINKNODE &pHead)
