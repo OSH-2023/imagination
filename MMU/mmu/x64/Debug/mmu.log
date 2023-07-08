@@ -1,0 +1,8 @@
+﻿  mmu_simulate.cpp
+c:\users\dell\desktop\osh2023\mmu\mmu\mmu_simulate.cpp(23): warning C4305: “+=”: 从“double”到“float”截断
+c:\users\dell\desktop\osh2023\mmu\mmu\mmu_simulate.cpp(36): warning C4305: “+=”: 从“double”到“float”截断
+c:\users\dell\desktop\osh2023\mmu\mmu\mmu_simulate.cpp(74): warning C4305: “+=”: 从“double”到“float”截断
+c:\users\dell\desktop\osh2023\mmu\mmu\mmu_simulate.cpp(150): warning C4305: “+=”: 从“double”到“float”截断
+c:\users\dell\desktop\osh2023\mmu\mmu\mmu_simulate.cpp(158): warning C4305: “+=”: 从“double”到“float”截断
+c:\users\dell\desktop\osh2023\mmu\mmu\mmu_simulate.cpp(182): warning C4305: “+=”: 从“double”到“float”截断
+  mmu.vcxproj -> C:\Users\DELL\Desktop\OSH2023\MMU\x64\Debug\mmu.exe
